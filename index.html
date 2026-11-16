@@ -188,7 +188,8 @@ details[open] summary{margin-bottom:10px}
     </div>
 
     <div class="card">
-      <h2>Plage d'adresses → CIDR</h2>
+      <h2>Convertir une plage en notation CIDR</h2>
+      <p class="hint" style="margin:-6px 0 10px">Utile quand un équipement (pare-feu, ACL, route) n'accepte que des réseaux en <code>/xx</code> et que vous avez une plage « de… à… » (pool DHCP, liste d'IP autorisées). Un bloc CIDR commence toujours sur une frontière et contient 1, 2, 4, 8, 16… adresses : une plage quelconque doit donc souvent être découpée en plusieurs blocs.</p>
       <div class="row">
         <div class="f grow"><label for="r-a">Première IP</label><input id="r-a" value="192.168.1.10" spellcheck="false"></div>
         <div class="f grow"><label for="r-b">Dernière IP</label><input id="r-b" value="192.168.1.100" spellcheck="false"></div>
@@ -640,10 +641,23 @@ function plage(){
   const a = ipToInt($('r-a').value), b = ipToInt($('r-b').value);
   if(a === null || b === null){ $('r-out').innerHTML = '<div class="msg err">IP invalide.</div>'; return; }
   const [s, e] = a <= b ? [a, b] : [b, a];
-  const list = rangeToCidrs(s, e);
-  $('r-out').innerHTML = `<div class="msg ok">${fmt(e - s + 1)} adresses → ${list.length} préfixe(s)</div>` +
-    tableHTML(['Préfixe', 'Masque', 'Adresses'], list.map(([n, p]) => ({cells: [`${intToIp(n)}/${p}`, intToIp(maskOf(p)), fmt(P2(32 - p))]})), {num: [2]}) +
-    `<div class="actions"><button id="r-copy">Copier les préfixes</button></div>`;
+  const list = rangeToCidrs(s, e), total = e - s + 1;
+  let p = 32; while(p > 0 && ((s & maskOf(p)) >>> 0) !== ((e & maskOf(p)) >>> 0)) p--;
+  const sup = info(s, p), extra = sup.size - total;
+  const COLORS = ['#4fd1c5', '#f2a65a', '#9f7aea', '#68d391', '#63b3ed', '#f687b3'];
+  const bar = list.map(([n, q], i) => `<div title="${intToIp(n)}/${q}" style="flex:${P2(32 - q)} 0 0;min-width:3px;background:${COLORS[i % COLORS.length]}"></div>`).join('');
+  $('r-out').innerHTML = `
+    <div style="margin-top:14px;font-size:13.5px"><b>① Un seul réseau qui contient toute la plage</b></div>
+    <div class="msg ${extra ? 'warn' : 'ok'}" style="margin-top:6px">${intToIp(sup.net)}/${p} &nbsp;(${intToIp(sup.net)} → ${intToIp(sup.bc)})<br>${extra
+      ? `Plus simple à écrire, mais englobe ${fmt(extra)} adresse(s) en dehors de votre plage.`
+      : `Correspondance exacte : votre plage est déjà un bloc CIDR.`}</div>
+    ${extra ? `<div style="margin-top:16px;font-size:13.5px"><b>② Découpage exact en ${list.length} bloc(s)</b> <span class="hint">— couvre précisément les ${fmt(total)} adresses, ni plus ni moins</span></div>
+    <div style="display:flex;gap:2px;height:14px;border-radius:4px;overflow:hidden;margin-top:8px">${bar}</div>
+    ${tableHTML(['', 'Bloc CIDR', 'De', 'À', 'Adresses'], list.map(([n, q], i) => ({cells: [
+      `<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${COLORS[i % COLORS.length]}"></span>`,
+      `${intToIp(n)}/${q}`, intToIp(n), intToIp(n + P2(32 - q) - 1), fmt(P2(32 - q))]})), {num: [4]})}
+    <div class="actions"><button id="r-copy">Copier les blocs CIDR</button></div>` : ''}`;
+  if(!extra) return;
   $('r-copy').onclick = () => copy(list.map(([n, p]) => `${intToIp(n)}/${p}`).join('\n'), 'Préfixes copiés');
 }
 function agreg(){
